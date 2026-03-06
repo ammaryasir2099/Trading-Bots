@@ -271,12 +271,3 @@ If you are looking for **custom trading software or quantitative tools**, feel f
 This project is provided for **research and educational purposes**.
 
 ---
-
-If you want, I can also help you create **3 extremely powerful additions that make your GitHub look 10× more professional**:
-
-1. **Professional GitHub project structure**
-2. **Screenshots dashboard section**
-3. **“Why this engine is different” section**
-4. **GitHub profile optimization for attracting clients**
-
-Those things dramatically increase **people contacting you for development work**.
