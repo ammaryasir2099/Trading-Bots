@@ -1,15 +1,5 @@
 # Trading-Bots
 Trading Analysis Bot
-Here is a **professional, attractive `README.md`** you can place in your GitHub repository. It is designed to:
-
-* showcase **your development skills**
-* attract **trading firms / developers**
-* make people **contact you for projects**
-* look **clean, professional and technical**
-
-You can **copy-paste directly** into `README.md`.
-
----
 
 # XAUUSD Market Guide Engine
 
