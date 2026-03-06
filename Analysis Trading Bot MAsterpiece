@@ -1,0 +1,227 @@
+//+------------------------------------------------------------------+
+//| XAUUSD Market Guide Engine – STEP 1 (ANALYSIS ONLY)               |
+//| NO TRADING – PROFESSIONAL MARKET INTELLIGENCE DASHBOARD           |
+//+------------------------------------------------------------------+
+#property strict
+#property version   "1.02"
+#property description "Market analysis engine with live confidence, state & score zone analysis"
+
+// ================= INPUTS =================
+input ENUM_TIMEFRAMES AnalysisTF = PERIOD_M5;
+
+// ================= GLOBALS =================
+double DecisionScore = 0.0;
+string MarketState   = "INIT";
+string MarketBias    = "Neutral";
+double ConfidencePct = 0.0;
+
+datetime BullDwellStart = 0;
+datetime BearDwellStart = 0;
+
+// NEW SCORE ZONE ANALYSIS VARIABLES
+string ScoreZoneLabel;
+string ScoreZoneMeaning;
+string MarketEnergy;
+
+// Indicator handles
+int hEMA20, hEMA50, hEMA200;
+int hRSI, hMACD;
+
+//+------------------------------------------------------------------+
+//| Clamp helper (MQL5 safe)                                         |
+//+------------------------------------------------------------------+
+double Clamp(double value,double min,double max)
+{
+   if(value < min) return min;
+   if(value > max) return max;
+   return value;
+}
+
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   hEMA20  = iMA(_Symbol, AnalysisTF, 20, 0, MODE_EMA, PRICE_CLOSE);
+   hEMA50  = iMA(_Symbol, AnalysisTF, 50, 0, MODE_EMA, PRICE_CLOSE);
+   hEMA200 = iMA(_Symbol, AnalysisTF, 200,0, MODE_EMA, PRICE_CLOSE);
+   hRSI    = iRSI(_Symbol, AnalysisTF, 14, PRICE_CLOSE);
+   hMACD   = iMACD(_Symbol, AnalysisTF, 12,26,9,PRICE_CLOSE);
+
+   if(hEMA20<0 || hEMA50<0 || hEMA200<0 || hRSI<0 || hMACD<0)
+      return INIT_FAILED;
+
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   if(!ComputeDecisionScore(DecisionScore))
+      return;
+
+   AnalyzeMarketState();
+   ComputeConfidence();
+   AnalyzeScoreZones();
+   DrawDashboard();
+}
+
+//+------------------------------------------------------------------+
+bool ComputeDecisionScore(double &score)
+{
+   double ema20[], ema50[], ema200[];
+   double rsi[];
+   double macdMain[], macdSignal[];
+
+   if(CopyBuffer(hEMA20,0,0,1,ema20)<=0) return false;
+   if(CopyBuffer(hEMA50,0,0,1,ema50)<=0) return false;
+   if(CopyBuffer(hEMA200,0,0,1,ema200)<=0) return false;
+   if(CopyBuffer(hRSI,0,0,1,rsi)<=0) return false;
+   if(CopyBuffer(hMACD,0,0,1,macdMain)<=0) return false;
+   if(CopyBuffer(hMACD,1,0,1,macdSignal)<=0) return false;
+
+   double emaScore  = ((ema20[0]-ema50[0]) + (ema50[0]-ema200[0])) / (ema200[0]*2.0);
+   emaScore = Clamp(emaScore,-1.0,1.0);
+
+   double rsiScore  = (rsi[0]-50.0)/50.0;
+   rsiScore = Clamp(rsiScore,-1.0,1.0);
+
+   double macdScore = macdMain[0]-macdSignal[0];
+   macdScore = Clamp(macdScore,-1.0,1.0);
+
+   score = 0.4*emaScore + 0.3*rsiScore + 0.3*macdScore;
+   score = Clamp(score,-1.0,1.0);
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
+void AnalyzeMarketState()
+{
+   if(DecisionScore > 0.60)
+   {
+      MarketState = "STRONG UPTREND";
+      MarketBias  = "BUYERS DOMINANT";
+      if(BullDwellStart==0) BullDwellStart = TimeCurrent();
+      BearDwellStart = 0;
+   }
+   else if(DecisionScore > 0.30)
+   {
+      MarketState = "CONTROLLED UPTREND";
+      MarketBias  = "BUY BIAS";
+      BullDwellStart = 0;
+      BearDwellStart = 0;
+   }
+   else if(DecisionScore < -0.60)
+   {
+      MarketState = "STRONG DOWNTREND";
+      MarketBias  = "SELLERS DOMINANT";
+      if(BearDwellStart==0) BearDwellStart = TimeCurrent();
+      BullDwellStart = 0;
+   }
+   else if(DecisionScore < -0.30)
+   {
+      MarketState = "CONTROLLED DOWNTREND";
+      MarketBias  = "SELL BIAS";
+      BullDwellStart = 0;
+      BearDwellStart = 0;
+   }
+   else
+   {
+      MarketState = "RANGING / CHOP";
+      MarketBias  = "NO EDGE";
+      BullDwellStart = 0;
+      BearDwellStart = 0;
+   }
+}
+
+//+------------------------------------------------------------------+
+void ComputeConfidence()
+{
+   double strength = MathAbs(DecisionScore);
+   double dwellSeconds = 0.0;
+
+   if(BullDwellStart>0)
+      dwellSeconds = (double)(TimeCurrent()-BullDwellStart);
+
+   if(BearDwellStart>0)
+      dwellSeconds = (double)(TimeCurrent()-BearDwellStart);
+
+   double dwellNorm = Clamp(dwellSeconds/20.0,0.0,1.0);
+
+   ConfidencePct = (0.7*strength + 0.3*dwellNorm) * 100.0;
+   ConfidencePct = Clamp(ConfidencePct,0.0,100.0);
+}
+
+//+------------------------------------------------------------------+
+void AnalyzeScoreZones()
+{
+   double s = DecisionScore;
+
+   if(MathAbs(s) < 0.03)
+   {
+      ScoreZoneLabel   = "Neutral Noise";
+      ScoreZoneMeaning = "Algorithmic churn, no real intent";
+      MarketEnergy     = "Very Low";
+   }
+   else if(MathAbs(s) < 0.07)
+   {
+      ScoreZoneLabel   = (s>0?"Micro Bullish":"Micro Bearish");
+      ScoreZoneMeaning = "Smart money accumulation / distribution";
+      MarketEnergy     = "Low – Building";
+   }
+   else if(MathAbs(s) < 0.12)
+   {
+      ScoreZoneLabel   = (s>0?"Controlled Bullish":"Controlled Bearish");
+      ScoreZoneMeaning = "Trend developing with structure";
+      MarketEnergy     = "Moderate";
+   }
+   else if(MathAbs(s) < 0.20)
+   {
+      ScoreZoneLabel   = (s>0?"Strong Bullish Zone":"Strong Bearish Zone");
+      ScoreZoneMeaning = "High-quality directional environment";
+      MarketEnergy     = "High – Tradable";
+   }
+   else if(MathAbs(s) < 0.40)
+   {
+      ScoreZoneLabel   = (s>0?"Aggressive Bullish":"Aggressive Bearish");
+      ScoreZoneMeaning = "Late trend, momentum players active";
+      MarketEnergy     = "Very High";
+   }
+   else if(MathAbs(s) < 0.60)
+   {
+      ScoreZoneLabel   = (s>0?"Bullish Exhaustion":"Bearish Exhaustion");
+      ScoreZoneMeaning = "Stop hunts, fake continuation risk";
+      MarketEnergy     = "Extreme – Dangerous";
+   }
+   else
+   {
+      ScoreZoneLabel   = "EXTREME EVENT";
+      ScoreZoneMeaning = "News / Panic / Institutional impulse";
+      MarketEnergy     = "MAXIMUM – Stand aside";
+   }
+}
+
+//+------------------------------------------------------------------+
+void DrawDashboard()
+{
+   Comment(
+      "XAUUSD MARKET GUIDE ENGINE (STEP 1)\n",
+      "=====================================\n",
+      "Decision Score   : ", DoubleToString(DecisionScore,3), "\n",
+      "Market State     : ", MarketState, "\n",
+      "Market Bias      : ", MarketBias, "\n",
+      "Confidence       : ", DoubleToString(ConfidencePct,1), " %\n",
+      "-------------------------------------\n",
+      "Bull Dwell (sec) : ", (BullDwellStart>0 ? (int)(TimeCurrent()-BullDwellStart) : 0), "\n",
+      "Bear Dwell (sec) : ", (BearDwellStart>0 ? (int)(TimeCurrent()-BearDwellStart) : 0), "\n",
+      "-------------------------------------\n",
+      "Score Zone        : ", ScoreZoneLabel, "\n",
+      "Zone Meaning      : ", ScoreZoneMeaning, "\n",
+      "Market Energy     : ", MarketEnergy, "\n",
+      "Score Magnitude   : ", DoubleToString(MathAbs(DecisionScore),3), "\n",
+      "-------------------------------------\n",
+      ConfidencePct>70 ? "✔ High quality environment" :
+      ConfidencePct>40 ? "⚠ Medium quality – be selective" :
+                         "✖ Low quality – avoid trading"
+   );
+}
+//+------------------------------------------------------------------+
