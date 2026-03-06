@@ -254,7 +254,7 @@ Areas of expertise include:
 
 # Collaboration & Projects
 
-I am open to collaboration on:
+I am open to collaboration on: and contact me on ammar.yasir2099@gmail.com
 
 * trading system development
 * algorithmic strategies
